@@ -1,76 +1,77 @@
+#!/usr/bin/env python3
+
 # Interactive python client for fizzbot
 
 import json
+import sys
 import urllib.request
 import urllib.error
 
-domain = 'https://api.noopschallenge.com'
+BASE_DOMAIN = 'https://api.noopschallenge.com'
 
-def print_sep(): print('----------------------------------------------------------------------')
+def fizzer(question_json):
+    rules = question_json.get('rules')
+    nums = question_json.get('numbers')
+    out_list = []
+    for num in nums:
+        result = ""
+        for rule in rules:
+            if num % rule.get('number') == 0:
+                result += rule.get('response')
 
-# print server response
-def print_response(dict):
-    print('')
-    print('message:')
-    print(dict.get('message'))
-    print('')
-    for key in dict:
-        if key != 'message':
-            print('%s: %s' % (key, json.dumps(dict.get(key))))
-    print('')
+        if not result:
+            result = str(num)
+        out_list.append(result)
+
+    return " ".join(out_list)
+
 
 # try an answer and see what fizzbot thinks of it
 def try_answer(question_url, answer):
-    print_sep()
     body = json.dumps({ 'answer': answer })
-    print('*** POST %s %s' % (question_url, body))
     try:
-        req = urllib.request.Request(domain + question_url, data=body.encode('utf8'), headers={'Content-Type': 'application/json'})
+        req = urllib.request.Request(BASE_DOMAIN + question_url, data=body.encode('utf8'), headers={'Content-Type': 'application/json'})
         res = urllib.request.urlopen(req)
         response = json.load(res)
-        print_response(response)
-        print_sep()
         return response
 
-    except urllib.error.HTTPError as e:
-        response = json.load(e)
-        print_response(response)
-        return response
+    except urllib.error.HTTPError as error:
+        print(error)
+        sys.exit(1)
 
 # keep trying answers until a correct one is given
-def get_correct_answer(question_url):
-    while True:
-        answer = input('Enter your answer:\n')
+def get_correct_answer(question_url, question_json, first):
+    if first:
+        answer = "python"
+    else:
+        answer = fizzer(question_json)
 
-        response = try_answer(question_url, answer)
+    response = try_answer(question_url, answer)
 
-        if (response.get('result') == 'interview complete'):
-            print('congratulations!')
-            exit()
+    if response.get('result') == 'interview complete':
+        print(f"completed in {response.get('elapsedSeconds')}s")
+        return
 
-        if (response.get('result') == 'correct'):
-            input('press enter to continue')
-            return response.get('nextQuestion')
+    if response.get('result') == 'correct':
+        return response.get('nextQuestion')
 
 # do the next question
-def do_question(domain, question_url):
-    print_sep()
-    print('*** GET %s' % question_url)
-
+def do_question(domain, question_url, first = False):
     request = urllib.request.urlopen( ('%s%s' % (domain, question_url)) )
-    question_data = json.load(request)
-    print_response(question_data)
-    print_sep()
+    question_json = json.load(request)
 
-    next_question = question_data.get('nextQuestion')
+    next_question = question_json.get('nextQuestion')
 
-    if next_question: return next_question
-    return get_correct_answer(question_url)
-
+    if next_question:
+        return next_question
+    return get_correct_answer(question_url, question_json, first)
 
 def main():
-    question_url = '/fizzbot'
+    question_url = '/fizzbot/questions/1'
+    first = True
     while question_url:
-        question_url = do_question(domain, question_url)
+        question_url = do_question(BASE_DOMAIN, question_url, first)
+        first = False
 
-if __name__ == '__main__': main()
+if __name__ == '__main__':
+    main()
